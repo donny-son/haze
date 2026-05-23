@@ -3,6 +3,7 @@ import { DropZone } from './components/DropZone';
 import { ControlPanel } from './components/ControlPanel';
 import { ExportPanel } from './components/ExportPanel';
 import { PreviewCanvas } from './components/PreviewCanvas';
+import { Minimap } from './components/Minimap';
 import { VideoTrim } from './video/trim';
 import { extractPalette, type PaletteEntry } from './engine/palette';
 import { buildAnchors, type Anchor } from './engine/composition';
@@ -29,6 +30,9 @@ interface Source {
   videoDuration?: number;
   videoStart?: number;
   videoEnd?: number;
+  // Small data URL shown as a minimap so the user can keep the
+  // original in view while comparing it to the haze.
+  thumbnailUrl?: string;
 }
 
 interface Memory {
@@ -75,10 +79,17 @@ export function App() {
     try {
       if (file.type.startsWith('image/')) {
         const imageData = await fileToImageData(file);
-        setSource({ kind: 'image', filename: file.name, imageData });
+        const thumbnailUrl = imageDataToThumbnail(imageData);
+        setSource({
+          kind: 'image',
+          filename: file.name,
+          imageData,
+          thumbnailUrl,
+        });
       } else if (file.type.startsWith('video/')) {
         const meta = await loadVideoMetadata(file);
         const end = Math.min(meta.duration, MAX_VIDEO_DURATION);
+        const thumbnailUrl = await videoFrameToThumbnail(meta.url, 0);
         setSource({
           kind: 'video',
           filename: file.name,
@@ -86,6 +97,7 @@ export function App() {
           videoDuration: meta.duration,
           videoStart: 0,
           videoEnd: end,
+          thumbnailUrl,
         });
       }
     } catch (err) {
@@ -326,7 +338,15 @@ export function App() {
               ref={previewCanvasRef}
               width={PREVIEW_W}
               height={PREVIEW_H}
-            />
+            >
+              {source.thumbnailUrl && (
+                <Minimap
+                  key={source.thumbnailUrl}
+                  url={source.thumbnailUrl}
+                  label={source.filename}
+                />
+              )}
+            </PreviewCanvas>
           )}
           {source && (
             <div className="flex justify-between text-xs opacity-50">
@@ -499,6 +519,60 @@ function reorderToMatch(
     palette: order.map((i) => next[i]),
     anchors: order.map((i) => anchors[i] ?? { x: 0.5, y: 0.5, baseX: 0.5, baseY: 0.5 }),
   };
+}
+
+function imageDataToThumbnail(data: ImageData, maxDim = 256): string {
+  const scale = Math.min(1, maxDim / Math.max(data.width, data.height));
+  const w = Math.max(1, Math.round(data.width * scale));
+  const h = Math.max(1, Math.round(data.height * scale));
+  const src = document.createElement('canvas');
+  src.width = data.width;
+  src.height = data.height;
+  src.getContext('2d')!.putImageData(data, 0, 0);
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  out.getContext('2d')!.drawImage(src, 0, 0, w, h);
+  return out.toDataURL('image/jpeg', 0.82);
+}
+
+async function videoFrameToThumbnail(
+  url: string,
+  atSec: number,
+  maxDim = 256,
+): Promise<string> {
+  const v = document.createElement('video');
+  v.src = url;
+  v.muted = true;
+  v.preload = 'auto';
+  v.crossOrigin = 'anonymous';
+  await new Promise<void>((resolve, reject) => {
+    v.onloadedmetadata = () => resolve();
+    v.onerror = () => reject(new Error('Could not load video for thumbnail.'));
+  });
+  await new Promise<void>((resolve, reject) => {
+    const onSeeked = () => {
+      v.removeEventListener('seeked', onSeeked);
+      v.removeEventListener('error', onErr);
+      resolve();
+    };
+    const onErr = () => {
+      v.removeEventListener('seeked', onSeeked);
+      v.removeEventListener('error', onErr);
+      reject(new Error('Thumbnail seek failed.'));
+    };
+    v.addEventListener('seeked', onSeeked);
+    v.addEventListener('error', onErr);
+    v.currentTime = Math.max(0, Math.min(atSec, (v.duration || 0) - 0.01));
+  });
+  const scale = Math.min(1, maxDim / Math.max(v.videoWidth, v.videoHeight));
+  const w = Math.max(1, Math.round(v.videoWidth * scale));
+  const h = Math.max(1, Math.round(v.videoHeight * scale));
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  c.getContext('2d')!.drawImage(v, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.82);
 }
 
 async function fileToImageData(file: File): Promise<ImageData> {
