@@ -45,14 +45,19 @@ export function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [memory, setMemory] = useState<Memory | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const animationStartRef = useRef<number>(performance.now());
 
-  // Spin up the renderer once when the preview canvas mounts.
-  useEffect(() => {
-    const c = previewCanvasRef.current;
-    if (!c || rendererRef.current) return;
+  // The preview canvas is mounted conditionally (only once a source exists),
+  // so we attach via a callback ref. This both fires when the canvas first
+  // appears AND when it remounts after "drop another", so the renderer is
+  // always bound to the live canvas element.
+  const previewCanvasRef = useCallback((c: HTMLCanvasElement | null) => {
+    if (!c) {
+      rendererRef.current = null;
+      return;
+    }
+    if (rendererRef.current?.canvas === c) return;
     try {
       rendererRef.current = new Renderer(c);
     } catch (err) {
