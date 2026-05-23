@@ -9,6 +9,12 @@ gradient.
 
 Everything runs locally in the browser. No upload, no account.
 
+## Project brief
+
+The full design brief — locked product decisions, engine architecture,
+animation/export notes, risks, milestones — is in
+[`docs/project-brief.md`](docs/project-brief.md).
+
 ## Run it
 
 ```bash
