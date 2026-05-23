@@ -182,11 +182,6 @@ void main() {
   float g = (hash(gl_FragCoord.xy + vec2(u_seed * 41.0, u_time * 53.0)) - 0.5);
   composite += vec3(g) * u_grain * 0.08;
 
-  // Subtle vignette so the eye lands on the center.
-  vec2 d = uv - 0.5;
-  float vig = 1.0 - dot(d, d) * 0.6;
-  composite *= vig;
-
   fragColor = vec4(clamp(composite, 0.0, 1.0), 1.0);
 }
 `;

@@ -4,6 +4,16 @@ export interface Weights {
   noise: number;
 }
 
+export interface ColorOverride {
+  hex?: string;
+  weight?: number; // clamp >= 0.01 at apply time
+  x?: number; // 0..1
+  y?: number; // 0..1
+}
+
+// keyframe index -> slot index -> override
+export type PaletteOverrides = Record<number, Record<number, ColorOverride>>;
+
 export interface Settings {
   weights: Weights;
   paletteSize: 3 | 5 | 8;
@@ -13,6 +23,7 @@ export interface Settings {
   matchSource: boolean;
   composition: number; // 0..1 lerp toward faithful
   resemblance: number; // 0..1 — how much of the source's shape survives the bloom
+  paletteOverrides: PaletteOverrides;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -24,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   matchSource: false,
   composition: 0.5,
   resemblance: 0.35,
+  paletteOverrides: {},
 };
 
 export interface ExportPreset {
