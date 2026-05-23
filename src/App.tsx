@@ -4,12 +4,14 @@ import { ControlPanel } from './components/ControlPanel';
 import { ExportPanel } from './components/ExportPanel';
 import { PreviewCanvas } from './components/PreviewCanvas';
 import { Minimap } from './components/Minimap';
+import { PaletteEditor } from './components/PaletteEditor';
 import { VideoTrim } from './video/trim';
 import { extractPalette, type PaletteEntry } from './engine/palette';
 import { buildAnchors, type Anchor } from './engine/composition';
 import { buildBloom } from './engine/layers/bloom';
 import { Renderer } from './engine/renderer';
 import { sampleAnimation, type Keyframe } from './engine/animator';
+import { applyOverrides } from './engine/overrides';
 import { canvasToPng } from './engine/encoders/png';
 import { exportAnimated } from './engine/encoders/webp';
 import { buildCssGradient, cssBlob } from './engine/encoders/css';
@@ -49,6 +51,9 @@ export function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [memory, setMemory] = useState<Memory | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // When non-null, the renderer freezes the animation at this keyframe's
+  // time so the user can edit a single moment without the haze drifting.
+  const [editingKeyframe, setEditingKeyframe] = useState<number | null>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const animationStartRef = useRef<number>(performance.now());
 
@@ -76,6 +81,9 @@ export function App() {
   const onFile = useCallback(async (file: File) => {
     setBusy('Reading…');
     setMemory(null);
+    // A new source invalidates any palette edits the user had on the old one.
+    setSettings((s) => ({ ...s, paletteOverrides: {} }));
+    setEditingKeyframe(0);
     try {
       if (file.type.startsWith('image/')) {
         const imageData = await fileToImageData(file);
@@ -107,6 +115,24 @@ export function App() {
       setBusy(null);
     }
   }, []);
+
+  // Setter for the ControlPanel that clears palette overrides when the slot
+  // count would change. Overrides are keyed by slot index; resizing the
+  // palette makes those keys ambiguous.
+  const updateSettings = useCallback((next: Settings) => {
+    setSettings((prev) =>
+      next.paletteSize !== prev.paletteSize
+        ? { ...next, paletteOverrides: {} }
+        : next,
+    );
+  }, []);
+
+  // Derived effective keyframes — raw extraction with user edits applied on
+  // top. Memoized so the animation tick doesn't recompute per frame.
+  const effectiveKeyframes = useMemo(
+    () => (memory ? applyOverrides(memory.keyframes, settings.paletteOverrides) : []),
+    [memory, settings.paletteOverrides],
+  );
 
   // Whenever source or palette-related settings change, rebuild the memory.
   useEffect(() => {
@@ -154,10 +180,17 @@ export function App() {
     renderer.setBloom(memory.bloom);
     let raf = 0;
     const tick = () => {
-      const t = (performance.now() - animationStartRef.current) / 1000;
+      const elapsed = (performance.now() - animationStartRef.current) / 1000;
+      // Snap time to the selected keyframe so palette edits are stable.
+      const t =
+        editingKeyframe !== null && effectiveKeyframes.length > 0
+          ? effectiveKeyframes[
+              Math.min(editingKeyframe, effectiveKeyframes.length - 1)
+            ].t * memory.durationSec
+          : elapsed;
       const { palette, anchors } = sampleAnimation(
         {
-          keyframes: memory.keyframes,
+          keyframes: effectiveKeyframes,
           duration: memory.durationSec,
           breathAmplitude: 1,
           breathHueAmplitude: 0.04,
@@ -180,7 +213,15 @@ export function App() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [memory, settings.weights, settings.softness, settings.grain, settings.seed]);
+  }, [
+    memory,
+    effectiveKeyframes,
+    editingKeyframe,
+    settings.weights,
+    settings.softness,
+    settings.grain,
+    settings.seed,
+  ]);
 
   const hasFaithfulData = source !== null;
 
@@ -199,7 +240,7 @@ export function App() {
       r.setBloom(memory.bloom);
       const { palette, anchors } = sampleAnimation(
         {
-          keyframes: memory.keyframes,
+          keyframes: effectiveKeyframes,
           duration: memory.durationSec,
           breathAmplitude: 1,
           breathHueAmplitude: 0.04,
@@ -218,7 +259,7 @@ export function App() {
       });
       return canvas;
     },
-    [memory, settings],
+    [memory, effectiveKeyframes, settings],
   );
 
   const handlePng = useCallback(
@@ -252,7 +293,7 @@ export function App() {
           drawFrame: (t) => {
             const { palette, anchors } = sampleAnimation(
               {
-                keyframes: memory.keyframes,
+                keyframes: effectiveKeyframes,
                 duration: memory.durationSec,
                 breathAmplitude: 1,
                 breathHueAmplitude: 0.04,
@@ -276,24 +317,24 @@ export function App() {
         document.body.removeChild(canvas);
       }
     },
-    [memory, settings, source],
+    [memory, effectiveKeyframes, settings, source],
   );
 
   const handleJson = useCallback(async () => {
-    if (!memory || memory.keyframes.length === 0) return;
-    const k0 = memory.keyframes[0];
+    if (effectiveKeyframes.length === 0) return;
+    const k0 = effectiveKeyframes[0];
     const json = buildPaletteJson(k0.palette, k0.anchors);
     downloadBlob(paletteJsonBlob(json), `${stem(source?.filename)}.palette.json`);
-  }, [memory, source]);
+  }, [effectiveKeyframes, source]);
 
   const handleCss = useCallback(async () => {
-    if (!memory || memory.keyframes.length === 0) return;
-    const k0 = memory.keyframes[0];
+    if (effectiveKeyframes.length === 0) return;
+    const k0 = effectiveKeyframes[0];
     downloadBlob(
       cssBlob(buildCssGradient(k0.palette, k0.anchors)),
       `${stem(source?.filename)}.gradient.css`,
     );
-  }, [memory, source]);
+  }, [effectiveKeyframes, source]);
 
   const animatedAvailable = useMemo(
     () =>
@@ -372,9 +413,22 @@ export function App() {
             <>
               <ControlPanel
                 settings={settings}
-                onChange={setSettings}
+                onChange={updateSettings}
                 hasFaithfulData={hasFaithfulData}
               />
+              {memory && memory.keyframes.length > 0 && (
+                <PaletteEditor
+                  rawKeyframes={memory.keyframes}
+                  overrides={settings.paletteOverrides}
+                  onChangeOverrides={(o) =>
+                    setSettings((s) => ({ ...s, paletteOverrides: o }))
+                  }
+                  isVideo={source.kind === 'video'}
+                  editingKeyframe={editingKeyframe ?? 0}
+                  onChangeEditingKeyframe={setEditingKeyframe}
+                  previewAspect={PREVIEW_W / PREVIEW_H}
+                />
+              )}
               <ExportPanel
                 onExportPng={handlePng}
                 onExportAnimated={handleAnimated}
