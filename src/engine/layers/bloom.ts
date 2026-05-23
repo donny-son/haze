@@ -8,14 +8,21 @@
 
 export function buildBloom(
   source: ImageData,
-  targetWidth = 96,
+  resemblance = 0,
 ): ImageData {
+  // resemblance ∈ [0, 1] sweeps the bloom from "abstract ghost" to
+  // "recognizable photo". Higher resemblance keeps more pixels and applies
+  // a lighter blur, so the source's geometry survives.
+  const r = Math.max(0, Math.min(1, resemblance));
+  const targetWidth = Math.round(96 + (512 - 96) * r);
+  const blurFrac = 0.125 + (0.02 - 0.125) * r;
+
   const scale = targetWidth / source.width;
   const w = Math.max(8, Math.round(source.width * scale));
   const h = Math.max(8, Math.round(source.height * scale));
 
   const down = downsample(source, w, h);
-  const radius = Math.max(4, Math.round(Math.min(w, h) / 8));
+  const radius = Math.max(2, Math.round(Math.min(w, h) * blurFrac));
   const blurred = gaussianBlur(down, radius);
   return blurred;
 }
