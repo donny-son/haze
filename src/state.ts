@@ -12,6 +12,7 @@ export interface Settings {
   seed: number;
   matchSource: boolean;
   composition: number; // 0..1 lerp toward faithful
+  resemblance: number; // 0..1 — how much of the source's shape survives the bloom
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -22,6 +23,7 @@ export const DEFAULT_SETTINGS: Settings = {
   seed: 7,
   matchSource: false,
   composition: 0.5,
+  resemblance: 0.35,
 };
 
 export interface ExportPreset {

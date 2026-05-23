@@ -25,6 +25,15 @@ export function ControlPanel({ settings, onChange, hasFaithfulData }: Props) {
           }
         />
         <Slider
+          label="Resemblance"
+          help="How much of the original photo survives the bloom"
+          value={settings.resemblance}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(v) => update({ resemblance: v })}
+        />
+        <Slider
           label="Mesh"
           help="Soft gradient anchors in OKLab"
           value={settings.weights.mesh}

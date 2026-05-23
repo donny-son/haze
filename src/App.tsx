@@ -131,6 +131,7 @@ export function App() {
     settings.seed,
     settings.matchSource,
     settings.composition,
+    settings.resemblance,
   ]);
 
   // Animation loop. Driven by requestAnimationFrame; updates the canvas
@@ -396,7 +397,7 @@ async function buildMemory(source: Source, settings: Settings): Promise<Memory> 
     );
     const composition = settings.matchSource ? settings.composition : 0;
     const anchors = buildAnchors(palette, composition, settings.seed);
-    const bloom = buildBloom(source.imageData);
+    const bloom = buildBloom(source.imageData, settings.resemblance);
     return {
       keyframes: [{ t: 0, palette, anchors }],
       durationSec: 6, // ambient breath has no inherent duration; pick a loop
@@ -454,7 +455,7 @@ async function buildMemory(source: Source, settings: Settings): Promise<Memory> 
 
     // Use the first frame for bloom (could average across frames, but a
     // single ghost is more recognizable than a blur of the whole clip).
-    const bloom = buildBloom(frames[0].imageData);
+    const bloom = buildBloom(frames[0].imageData, settings.resemblance);
     return {
       keyframes,
       durationSec: clipDuration,
