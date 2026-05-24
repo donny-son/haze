@@ -11,6 +11,7 @@ interface Props {
   onExportCss: () => Promise<void>;
   animatedAvailable: boolean;
   animationDuration: number; // suggested duration in seconds
+  onResolutionChange?: (preset: ExportPreset) => void;
 }
 
 export function ExportPanel({
@@ -20,6 +21,7 @@ export function ExportPanel({
   onExportCss,
   animatedAvailable,
   animationDuration,
+  onResolutionChange,
 }: Props) {
   const [preset, setPreset] = useState<ExportPreset>(EXPORT_PRESETS[0]);
   const [custom, setCustom] = useState<{ w: number; h: number }>({
@@ -60,6 +62,7 @@ export function ExportPanel({
               onClick={() => {
                 setPreset(p);
                 setUseCustom(false);
+                onResolutionChange?.(p);
               }}
               className={[
                 'text-left rounded-md border px-3 py-2 text-sm transition',
@@ -78,7 +81,13 @@ export function ExportPanel({
         </div>
 
         <button
-          onClick={() => setUseCustom((u) => !u)}
+          onClick={() => {
+            const next = !useCustom;
+            setUseCustom(next);
+            onResolutionChange?.(
+              next ? { name: 'Custom', width: custom.w, height: custom.h } : preset,
+            );
+          }}
           className={[
             'text-left rounded-md border px-3 py-2 text-sm transition',
             useCustom
@@ -91,12 +100,20 @@ export function ExportPanel({
             <div className="flex items-center gap-2 mt-2">
               <NumberInput
                 value={custom.w}
-                onChange={(v) => setCustom({ ...custom, w: v })}
+                onChange={(v) => {
+                  const updated = { ...custom, w: v };
+                  setCustom(updated);
+                  onResolutionChange?.({ name: 'Custom', width: updated.w, height: updated.h });
+                }}
               />
               <span className="opacity-50">×</span>
               <NumberInput
                 value={custom.h}
-                onChange={(v) => setCustom({ ...custom, h: v })}
+                onChange={(v) => {
+                  const updated = { ...custom, h: v };
+                  setCustom(updated);
+                  onResolutionChange?.({ name: 'Custom', width: updated.w, height: updated.h });
+                }}
               />
             </div>
           )}
