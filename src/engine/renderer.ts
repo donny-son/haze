@@ -38,6 +38,8 @@ uniform sampler2D u_bloom;
 uniform vec3 u_anchorLab[${N}];
 uniform vec2 u_anchorPos[${N}];
 uniform float u_weights[${N}];
+// 0 = glow (Shepard-blended into the mesh), 1 = spike (additive sparkle).
+uniform int u_anchorKind[${N}];
 uniform float u_wBloom;
 uniform float u_wMesh;
 uniform float u_wNoise;
@@ -135,16 +137,39 @@ void main() {
   float falloff = mix(2.8, 1.6, clamp(u_softness, 0.0, 1.0));
   vec3 meshLab = vec3(0.0);
   float wsum = 0.0;
+  vec3 spikeRgb = vec3(0.0);
   for (int i = 0; i < ${N}; i++) {
     vec2 ap = u_anchorPos[i];
     vec2 paa = vec2(ap.x * aspect, ap.y);
-    float d = distance(puv, paa);
-    float w = u_weights[i] / pow(d + 0.001, falloff);
-    meshLab += u_anchorLab[i] * w;
-    wsum += w;
+    if (u_anchorKind[i] == 1) {
+      // Spike: two thin perpendicular beams + a bright core, additive.
+      vec2 d = puv - paa;
+      float beamSigma2 = 0.000022;          // ~thickness 0.005 in puv units
+      float hBeam = exp(-d.y * d.y / beamSigma2);
+      float vBeam = exp(-d.x * d.x / beamSigma2);
+      float dist2 = dot(d, d);
+      float reach = exp(-dist2 / 0.025);    // beams fade out past a radius
+      float core = exp(-dist2 / 0.0035);    // tight hot center
+      float intensity = (max(hBeam, vBeam) * reach + core * 1.8) * u_weights[i];
+      spikeRgb += oklabToRgb(u_anchorLab[i]) * intensity;
+    } else {
+      // Glow: Shepard inverse-distance weighting into the mesh.
+      float d = distance(puv, paa);
+      float w = u_weights[i] / pow(d + 0.001, falloff);
+      meshLab += u_anchorLab[i] * w;
+      wsum += w;
+    }
   }
-  meshLab /= max(wsum, 1e-6);
-  vec3 meshRgb = oklabToRgb(meshLab);
+  vec3 meshRgb;
+  if (wsum > 1e-3) {
+    meshLab /= wsum;
+    meshRgb = oklabToRgb(meshLab);
+  } else {
+    // All anchors are spikes — leave the mesh slot dark so bloom/noise can
+    // still show through without saturated junk from div-by-tiny.
+    meshLab = vec3(0.0);
+    meshRgb = vec3(0.0);
+  }
 
   // Bloom layer.
   vec3 bloomRgb = texture(u_bloom, uv).rgb;
@@ -177,6 +202,12 @@ void main() {
   ws = max(ws, 1e-3);
   vec3 composite =
     (bloomRgb * u_wBloom + meshRgb * u_wMesh + noiseRgb * u_wNoise) / ws;
+
+  // Spikes are added on top, scaled by the mesh slider since they're
+  // conceptually part of the anchored-mesh layer (just a different shape).
+  // HDR-bright core values will clamp at the end, producing the neon
+  // burn-out look at the tips.
+  composite += spikeRgb * u_wMesh;
 
   // Grain.
   float g = (hash(gl_FragCoord.xy + vec2(u_seed * 41.0, u_time * 53.0)) - 0.5);
@@ -287,6 +318,7 @@ export class Renderer {
     const labs = new Float32Array(n * 3);
     const positions = new Float32Array(n * 2);
     const weights = new Float32Array(n);
+    const kinds = new Int32Array(n);
     for (let i = 0; i < n; i++) {
       labs[i * 3] = palette[i].oklab[0];
       labs[i * 3 + 1] = palette[i].oklab[1];
@@ -294,12 +326,14 @@ export class Renderer {
       positions[i * 2] = anchors[i]?.x ?? 0.5;
       positions[i * 2 + 1] = anchors[i]?.y ?? 0.5;
       weights[i] = Math.max(0.05, palette[i].weight);
+      kinds[i] = palette[i].kind === 'spike' ? 1 : 0;
     }
 
     const u = (name: string) => gl.getUniformLocation(this.prog!, name);
     gl.uniform3fv(u('u_anchorLab'), labs);
     gl.uniform2fv(u('u_anchorPos'), positions);
     gl.uniform1fv(u('u_weights'), weights);
+    gl.uniform1iv(u('u_anchorKind'), kinds);
     gl.uniform1f(u('u_wBloom'), params.weights.bloom);
     gl.uniform1f(u('u_wMesh'), params.weights.mesh);
     gl.uniform1f(u('u_wNoise'), params.weights.noise);

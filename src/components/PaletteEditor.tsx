@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Keyframe } from '../engine/animator';
 import type { ColorOverride, PaletteOverrides } from '../state';
+import type { AnchorKind } from '../engine/palette';
 import { applyOverrides, hasAnyOverrides, setOverride } from '../engine/overrides';
+import { AnchorOverlay } from './AnchorOverlay';
 
 interface Props {
   rawKeyframes: Keyframe[];
@@ -90,10 +92,11 @@ export function PaletteEditor({
         />
       )}
 
-      <AnchorMap
+      <AnchorOverlay
         palette={kf.palette}
         positions={kf.anchors}
         aspect={previewAspect}
+        background
         onMove={(slot, x, y) => patchSlot(slot, { x, y })}
       />
 
@@ -108,6 +111,7 @@ export function PaletteEditor({
             oklabC={Math.sqrt(entry.oklab[1] ** 2 + entry.oklab[2] ** 2)}
             x={kf.anchors[i]?.x ?? 0.5}
             y={kf.anchors[i]?.y ?? 0.5}
+            kind={entry.kind}
             modified={!!slotOverrides[i]}
             onChange={(patch) => patchSlot(i, patch)}
             onReset={() => patchSlot(i, null)}
@@ -182,69 +186,6 @@ function KeyframeStrip({
   );
 }
 
-function AnchorMap({
-  palette,
-  positions,
-  aspect,
-  onMove,
-}: {
-  palette: { hex: string }[];
-  positions: { x: number; y: number }[];
-  aspect: number;
-  onMove: (slot: number, x: number, y: number) => void;
-}) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [drag, setDrag] = useState<number | null>(null);
-
-  const onPointerDown = (slot: number) => (e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.target as Element).setPointerCapture(e.pointerId);
-    setDrag(slot);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (drag === null || !ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    onMove(drag, clamp01(x), clamp01(y));
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (drag !== null) {
-      (e.target as Element).releasePointerCapture?.(e.pointerId);
-    }
-    setDrag(null);
-  };
-
-  return (
-    <div
-      ref={ref}
-      className="relative w-full rounded border border-paper/10 bg-mist overflow-hidden select-none"
-      style={{ aspectRatio: `${aspect}` }}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-    >
-      {positions.map((p, i) => (
-        <button
-          type="button"
-          key={i}
-          onPointerDown={onPointerDown(i)}
-          className={
-            'absolute w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-paper shadow-md cursor-grab ' +
-            (drag === i ? 'cursor-grabbing scale-110' : '')
-          }
-          style={{
-            left: `${p.x * 100}%`,
-            top: `${p.y * 100}%`,
-            background: palette[i]?.hex ?? '#888',
-          }}
-          title={`#${i + 1} · ${palette[i]?.hex ?? ''}`}
-        />
-      ))}
-    </div>
-  );
-}
-
 function SlotRow({
   index,
   hex,
@@ -253,6 +194,7 @@ function SlotRow({
   oklabC,
   x,
   y,
+  kind,
   modified,
   onChange,
   onReset,
@@ -264,6 +206,7 @@ function SlotRow({
   oklabC: number;
   x: number;
   y: number;
+  kind: AnchorKind;
   modified: boolean;
   onChange: (patch: ColorOverride) => void;
   onReset: () => void;
@@ -340,14 +283,32 @@ function SlotRow({
           className="flex-1 min-w-0"
           title="Influence weight"
         />
-        <span className="text-[10px] tabular-nums opacity-40 whitespace-nowrap">
-          L {oklabL.toFixed(2)} · C {oklabC.toFixed(2)} · {x.toFixed(2)},{y.toFixed(2)}
-        </span>
+        <KindToggle kind={kind} onChange={(k) => onChange({ kind: k })} />
+      </div>
+      <div className="text-[10px] tabular-nums opacity-40 whitespace-nowrap">
+        L {oklabL.toFixed(2)} · C {oklabC.toFixed(2)} · {x.toFixed(2)},{y.toFixed(2)}
       </div>
     </div>
   );
 }
 
-function clamp01(v: number) {
-  return Math.max(0, Math.min(1, v));
+function KindToggle({
+  kind,
+  onChange,
+}: {
+  kind: AnchorKind;
+  onChange: (k: AnchorKind) => void;
+}) {
+  const next: AnchorKind = kind === 'glow' ? 'spike' : 'glow';
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(next)}
+      className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-mist-soft hover:bg-paper/15 border border-paper/10 whitespace-nowrap"
+      title={`Shape: ${kind} (click for ${next})`}
+    >
+      {kind === 'glow' ? '○ glow' : '✦ spike'}
+    </button>
+  );
 }
+

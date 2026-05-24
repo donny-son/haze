@@ -99,6 +99,8 @@ function interpolateKeyframe(
       weight: a.palette[i].weight * (1 - t) + b.palette[i].weight * t,
       centroidX: a.palette[i].centroidX * (1 - t) + b.palette[i].centroidX * t,
       centroidY: a.palette[i].centroidY * (1 - t) + b.palette[i].centroidY * t,
+      // Kind is discrete; hold the first frame's choice for the whole span.
+      kind: a.palette[i].kind,
     });
     const ax = a.anchors[i] ?? { baseX: 0.5, baseY: 0.5, x: 0.5, y: 0.5 };
     const bx = b.anchors[i] ?? ax;
