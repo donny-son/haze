@@ -1,3 +1,5 @@
+import type { AnchorKind } from './engine/palette';
+
 export interface Weights {
   bloom: number;
   mesh: number;
@@ -9,6 +11,7 @@ export interface ColorOverride {
   weight?: number; // clamp >= 0.01 at apply time
   x?: number; // 0..1
   y?: number; // 0..1
+  kind?: AnchorKind;
 }
 
 // keyframe index -> slot index -> override
