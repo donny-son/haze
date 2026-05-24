@@ -5,6 +5,10 @@
 
 import { type OKLab, oklabToRgb, rgbToOklab, rgbToHex } from './color';
 
+// 'glow' = soft radial blob blended into the mesh (default).
+// 'spike' = sharp 4-point sparkle drawn additively on top of the mesh.
+export type AnchorKind = 'glow' | 'spike';
+
 export interface PaletteEntry {
   hex: string;
   oklab: OKLab;
@@ -13,6 +17,7 @@ export interface PaletteEntry {
   // Used by "match source composition" mode in src/engine/composition.ts.
   centroidX: number;
   centroidY: number;
+  kind: AnchorKind;
 }
 
 interface Sample {
@@ -115,6 +120,7 @@ export function extractPalette(
     weight: 0,
     centroidX: 0,
     centroidY: 0,
+    kind: 'glow',
   }));
   const counts = new Array(centroids.length).fill(0);
   const xs = new Array(centroids.length).fill(0);

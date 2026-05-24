@@ -26,7 +26,8 @@ export function applyOverrides(
         hex = ov.hex;
       }
       const weight = ov.weight ?? entry.weight;
-      return { ...entry, oklab, hex, weight };
+      const kind = ov.kind ?? entry.kind;
+      return { ...entry, oklab, hex, weight, kind };
     });
     const anchors = kf.anchors.map((a, i) => {
       const ov = slots[i];

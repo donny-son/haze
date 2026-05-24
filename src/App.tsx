@@ -5,6 +5,8 @@ import { ExportPanel } from './components/ExportPanel';
 import { PreviewCanvas } from './components/PreviewCanvas';
 import { Minimap } from './components/Minimap';
 import { PaletteEditor } from './components/PaletteEditor';
+import { AnchorOverlay } from './components/AnchorOverlay';
+import { setOverride } from './engine/overrides';
 import { VideoTrim } from './video/trim';
 import { extractPalette, type PaletteEntry } from './engine/palette';
 import { buildAnchors, type Anchor } from './engine/composition';
@@ -378,6 +380,29 @@ export function App() {
               ref={previewCanvasRef}
               width={previewPreset.width}
               height={previewPreset.height}
+              overlay={
+                effectiveKeyframes.length > 0 && (
+                  <AnchorOverlay
+                    palette={effectiveKeyframes[
+                      Math.min(editingKeyframe ?? 0, effectiveKeyframes.length - 1)
+                    ].palette}
+                    positions={effectiveKeyframes[
+                      Math.min(editingKeyframe ?? 0, effectiveKeyframes.length - 1)
+                    ].anchors}
+                    onMove={(slot, x, y) =>
+                      setSettings((s) => ({
+                        ...s,
+                        paletteOverrides: setOverride(
+                          s.paletteOverrides,
+                          editingKeyframe ?? 0,
+                          slot,
+                          { x, y },
+                        ),
+                      }))
+                    }
+                  />
+                )
+              }
             >
               {source.thumbnailUrl && (
                 <Minimap
