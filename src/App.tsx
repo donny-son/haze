@@ -21,7 +21,7 @@ import {
   sampleVideoFrames,
   MAX_VIDEO_DURATION,
 } from './video/decode';
-import { DEFAULT_SETTINGS, type ExportPreset, type Settings } from './state';
+import { DEFAULT_SETTINGS, EXPORT_PRESETS, type ExportPreset, type Settings } from './state';
 
 interface Source {
   kind: 'image' | 'video';
@@ -43,12 +43,10 @@ interface Memory {
   bloom: ImageData;
 }
 
-const PREVIEW_W = 1280;
-const PREVIEW_H = 720;
-
 export function App() {
   const [source, setSource] = useState<Source | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [previewPreset, setPreviewPreset] = useState<ExportPreset>(EXPORT_PRESETS[0]);
   const [memory, setMemory] = useState<Memory | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   // When non-null, the renderer freezes the animation at this keyframe's
@@ -200,8 +198,8 @@ export function App() {
       );
       if (palette.length > 0) {
         renderer.render(palette, anchors, {
-          width: PREVIEW_W,
-          height: PREVIEW_H,
+          width: previewPreset.width,
+          height: previewPreset.height,
           weights: settings.weights,
           softness: settings.softness,
           grain: settings.grain,
@@ -221,6 +219,7 @@ export function App() {
     settings.softness,
     settings.grain,
     settings.seed,
+    previewPreset,
   ]);
 
   const hasFaithfulData = source !== null;
@@ -377,8 +376,8 @@ export function App() {
           {source && (
             <PreviewCanvas
               ref={previewCanvasRef}
-              width={PREVIEW_W}
-              height={PREVIEW_H}
+              width={previewPreset.width}
+              height={previewPreset.height}
             >
               {source.thumbnailUrl && (
                 <Minimap
@@ -392,8 +391,7 @@ export function App() {
           {source && (
             <div className="flex justify-between text-xs opacity-50">
               <span>
-                Preview at {PREVIEW_W}×{PREVIEW_H}. Exports render at the
-                chosen target resolution.
+                Preview at {previewPreset.width}×{previewPreset.height}.
               </span>
               <button
                 className="underline hover:opacity-100 opacity-70"
@@ -426,7 +424,7 @@ export function App() {
                   isVideo={source.kind === 'video'}
                   editingKeyframe={editingKeyframe ?? 0}
                   onChangeEditingKeyframe={setEditingKeyframe}
-                  previewAspect={PREVIEW_W / PREVIEW_H}
+                  previewAspect={previewPreset.width / previewPreset.height}
                 />
               )}
               <ExportPanel
@@ -436,6 +434,7 @@ export function App() {
                 onExportCss={handleCss}
                 animatedAvailable={animatedAvailable}
                 animationDuration={memory?.durationSec ?? 6}
+                onResolutionChange={setPreviewPreset}
               />
             </>
           )}
