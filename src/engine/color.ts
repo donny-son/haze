@@ -32,7 +32,7 @@ export function rgbToOklab(r: number, g: number, b: number): OKLab {
   ];
 }
 
-export function oklabToRgb(L: number, a: number, b: number): RGB {
+export function oklabToLinearRgb(L: number, a: number, b: number): RGB {
   const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
   const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
   const s_ = L - 0.0894841775 * a - 1.291485548 * b;
@@ -41,15 +41,32 @@ export function oklabToRgb(L: number, a: number, b: number): RGB {
   const m = m_ * m_ * m_;
   const s = s_ * s_ * s_;
 
-  const rl = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-  const gl = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-  const bl = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+  return [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ];
+}
 
+export function oklabToRgb(L: number, a: number, b: number): RGB {
+  const [rl, gl, bl] = oklabToLinearRgb(L, a, b);
   return [
     Math.max(0, Math.min(255, Math.round(linearToSrgb(rl) * 255))),
     Math.max(0, Math.min(255, Math.round(linearToSrgb(gl) * 255))),
     Math.max(0, Math.min(255, Math.round(linearToSrgb(bl) * 255))),
   ];
+}
+
+// True when an OKLab triple lies inside the sRGB cube (no clipping needed).
+// Used by palette extraction to keep chroma-boosted accent colors representable.
+export function oklabInSrgbGamut(L: number, a: number, b: number): boolean {
+  const [r, g, bl] = oklabToLinearRgb(L, a, b);
+  const eps = 1e-4;
+  return (
+    r >= -eps && r <= 1 + eps &&
+    g >= -eps && g <= 1 + eps &&
+    bl >= -eps && bl <= 1 + eps
+  );
 }
 
 export function mixOklab(a: OKLab, b: OKLab, t: number): OKLab {
